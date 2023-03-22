@@ -22,41 +22,38 @@ for(i in 1:length(dir)){
   maize[[i]]@meta.data$orig.ident <-names(dir)[i]
 }
 maize[[1]]@meta.data[1:5,]
-#################################### 设置seurat对象 #################################### 
-#标准化NormalizeData
+#################################### Set the seurat object #################################### 
+#NormalizeData
 for (i in 1:length(maize)) {
-  #未使用SCT标准化 Error in PrepDR(object = object, features = features, verbose = verbose) : Variable features haven't been set. Run FindVariableFeatures() or provide a vector of feature names.
-  maize[[i]] <- SCTransform(maize[[i]], assay = "Spatial", verbose = FALSE) #使用SCT标准化
+  maize[[i]] <- SCTransform(maize[[i]], assay = "Spatial", verbose = FALSE) #SCT standardization
 }
-# saveRDS(maize[[1]],file="S12D_1.rds")
-# saveRDS(maize[[2]],file="S18D_1.rds")
-# saveRDS(maize[[3]],file="S18D_2.rds")
-# saveRDS(maize[[4]],file="S24D_1.rds")
+saveRDS(maize[[1]],file="S12D_1.rds")
+saveRDS(maize[[2]],file="S18D_1.rds")
+saveRDS(maize[[3]],file="S18D_2.rds")
+saveRDS(maize[[4]],file="S24D_1.rds")
 maize[[i]]
-maize[[1]]@assays$SCT@data[1:5,1:20]   ### 大于0的小数
+maize[[1]]@assays$SCT@data[1:5,1:20] 
 maize[[1]]
 ## # select features that are repeatedly variable across datasets for integration,
 features <- SelectIntegrationFeatures(object.list = maize,nfeatures = 3000)
 maize <- PrepSCTIntegration(object.list = maize, anchor.features = features)
-############################### 基因表达可视化:看myb14;27kd
+############################### Gene expression visualization
 p <-list()
 for (i in 1:4) {p[[i]] <- SpatialFeaturePlot(maize[[i]], features = c("Zm00001d021537","Zm00001d020592"))}
 p
 
 SpatialFeaturePlot(maize_in, features = c("Zm00001d052759"))
-#################################### 执行整合 #################################### 
-# 使用这些锚点将两个数据集集成在一起；Running CCA, finding all pairwise anchors;found 5601 anchors,retained 4124 anchors；5-10min
+#################################### Executive integration #################################### 
+# These anchors are used to integrate the two data sets together；Running CCA, finding all pairwise anchors;found 5601 anchors,retained 4124 anchors；5-10min
 maize.anchors <- FindIntegrationAnchors(object.list = maize, normalization.method="SCT",anchor.features = features)
 # this command creates an 'integrated' data assay;   3  min
 maize_in <- IntegrateData(anchorset = maize.anchors, normalization.method="SCT")
 dim(maize_in)
 table(maize[[4]]@meta.data$orig.ident)
-# saveRDS(maize_in,file="0maize_in合并无聚类.rds")
-#################################### 执行整合分析 #################################### 
-#### 现在我们可以对所有细胞进行单次整合分析！
-#################################### 5.降维、聚类和可视化 ###################################################
+saveRDS(maize_in,file="0maize_in.rds")
+#################################### 5.Dimension reduction、clustering and visualization ###################################################
 maize_in <- RunPCA(maize_in, verbose = FALSE)
 maize_in <- RunUMAP(maize_in, reduction = "pca", dims = 1:30)
 maize_in <- FindNeighbors(maize_in, dims = 1:30)
-# saveRDS(maize_in,file="1maize_in标化并合并.rds")
+saveRDS(maize_in,file="1maize_in.rds")
 
