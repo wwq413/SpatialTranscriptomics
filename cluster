@@ -1,0 +1,402 @@
+rm(list=ls())
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+library(cowplot)
+library(dplyr)
+library(tibble)
+library(hdf5r)
+setwd("/2020simpleDuckweeds/spatial/maizev7")
+maize_in <- readRDS("/2020simpleDuckweeds/spatial/maizev7/1maize_in标化并合并.rds") #这是4张片子的整合文件
+table(maize_in@meta.data$orig.ident)
+maize_in@meta.data[1:10,1:8]
+#################################### 降维、聚类和可视化 ###################################################
+# maize_in <- FindClusters(maize_in, resolution = 0.5,verbose = FALSE)
+# maize_in <- FindClusters(maize_in, resolution = 1.0,verbose = FALSE)
+maize_in <- FindClusters(maize_in, resolution = 1.2,verbose = FALSE)
+cols.orgi <- c(
+  "#7fc97f","#beaed4","#fdc086","#386cb0","#ecb9e5","#f0027f","#666666","#1b9e77","#d95f02","#7570b3",
+  "#efbd25","#43acde","#d01b2a","#B4EEB4","#743fd2","#2f8400","#d9d73b","#aed4ff","#a34e3b","#e6908e",
+  "#813139","#cd4275","#434b7e","#214a00","#ef6100","#7d9974","#e63c66","#cf48c7","#ffe40a","#a76e93",
+  "#d9874a","#adc64a","#5466df","#d544a1","#54d665","#5e99c7","#006874","#d2ad2c","#b5d7a5","#9e8442",
+  "#4e1737","#e482a7","#6f451d","#2ccfe4","#ae6174","#a666be","#a32b2b","#ffff99","#3fdacb","#bf5b17")
+############# 注意事项！！！ SpatialDimPlot=SpatialPlot，但是参数是复数images;而LinkedDimPlot是单数image;DimPlot不能用image
+# p1 <- DimPlot(maize_in, reduction = "umap", label=T,repel=T);p1 # 可视化所有spot，不分来源
+# p2 <- DimPlot(maize_in, reduction = "umap", group.by = "orig.ident");p2 # 可视化这4个来源
+# p4 <- DimPlot(maize_in, reduction = "umap", group.by = "ident", split.by = "orig.ident",label = TRUE,repel = TRUE);p4 #并排可视化这4个来源
+# p5 <- SpatialFeaturePlot(maize_in, features = "nCount_Spatial") + theme(legend.position = "right");p5 #标准化前
+# p6 <- SpatialDimPlot(maize_in,cols=cols.orgi,stroke=0.1);p6 #pdf("merge_umap_slice1.pdf",width=10,height=5);#dev.off()
+#####################################画出单张原始分区图
+SpatialPlot(maize_in,cols=cols.orgi,label = TRUE,images = "slice1")  #S12D_1
+SpatialPlot(maize_in,cols=cols.orgi,stroke=0.1,images = "slice1.1")#S18D_1
+SpatialPlot(maize_in,cols=cols.orgi,stroke=0.1,images = "slice1.2")#S18D_2
+SpatialPlot(maize_in,cols=cols.orgi,stroke=0.1,images = "slice1.3")#S24D_1
+SpatialPlot(maize_in,cols=cols.orgi)  #S12D_1
+# LinkedDimPlot(maize_in,image="slice1.1") #可以查看spot与分区的关系，但无法定义自己的颜色
+#################################### 通过空转图和点图TSNE从下面的图中肉眼分析############################
+###可以发现(10-PC), (15,26,8,20-PE),(4-AL Yes),(23-BETL Yes ),(14,12-CZ Yes ),(27,0,7,1,2,3-OE),(11,21,25,9,6,24,16-VE),
+# (13-EAS),(5,18,17,27-SCU Yes),(19,22-RA),在一起是一致的.例外(17-ESR (12DAP))
+### 11从VE改成SE
+############ S12D_1:
+SpatialDimPlot(maize_in,cols=cols.orgi,label = TRUE,label.size=2,images="slice1")
+S12D_1 <- subset(maize_in, orig.ident=="S12D_1") ### orig.ident一定要用2个=；把S12D_1单独分出来是为了更好查看点图进行分区修正
+DimPlot(S12D_1,cols=cols.orgi,label = TRUE,label.size=2)
+############ S18D_1:
+SpatialDimPlot(maize_in,cols=cols.orgi,label = TRUE,label.size=2,images="slice1.1")
+S18D_1 <- subset(maize_in, orig.ident=="S18D_1") ### orig.ident一定要用2个=
+DimPlot(S18D_1,cols=cols.orgi,label = TRUE,label.size=2)
+############ S18D_2:
+SpatialDimPlot(maize_in,cols=cols.orgi,label = TRUE,label.size=2,images="slice1.2")
+S18D_2 <- subset(maize_in, orig.ident=="S18D_2") ### orig.ident一定要用2个=
+DimPlot(S18D_2,cols=cols.orgi,label = TRUE,label.size=2)
+############ S24D_1:
+SpatialDimPlot(maize_in,cols=cols.orgi,label = TRUE,label.size=2,images="slice1.3")
+S24D_1 <- subset(maize_in, orig.ident=="S24D_1") ### orig.ident一定要用2个=
+DimPlot(S24D_1,cols=cols.orgi,label = TRUE,label.size=2)
+############################ 合并分区; ,``=""
+maize_in <- RenameIdents(maize_in,`10` = "PC",`15` ="PE",`26` ="PE",`8` ="PE",`20` ="PE",`4`="AL",`23`="BETL",
+                         `12`="CZ",`14`="CZ",`0`="SE",`7`="SE",`1`="SE",`2`="SE",`3`="VE",`11`="VE",`21`="VE",`25`="SE",`9`="VE",
+                         `6`="SE",`24`="SE",`16`="VE",`13`="EAS",`5`="SCU",`18`="SCU",`17`="SCU",`19`="RA",`22`="RA")
+cols <- c("#97C9DC","#EF0002","#FACD5C","#FEEC70","#F8A33F","#B9D5AD","#BBD864","#FF52E5","#55ACD9","#FAECA9","#FFB6DE")
+names(cols) <- c("PE","ESR","VE","SE","AL","SCU","RA","EAS","PC","CZ","BETL")
+cols #"#FFFFFF"白色
+#######重要！！！ 添加聚类标签new cluster进meta.data，后面用它的分区来画图
+maize_in@meta.data$newclusters <- Idents(maize_in)
+head(maize_in@meta.data)
+table(Idents(maize_in))### table() 查看每个类型中有多少细胞
+########################### 精修小区
+############ S12D_1:
+#### 把S12D_1单独分出来是为了更好查看点图进行分区修正
+DimPlot(S12D_1,cols=cols.orgi,label = TRUE,label.size=2)
+# LinkedDimPlot(maize_in,image="slice1",reduction = "tsne")
+############ S18D_1:
+DimPlot(S18D_1,cols=cols.orgi,label = TRUE,label.size=2)
+# LinkedDimPlot(maize_in,image="slice1.1")
+############ S18D_2:
+DimPlot(S18D_2,cols=cols.orgi,label = TRUE,label.size=2)
+# LinkedDimPlot(maize_in,image="slice1.2")
+############ S24D_1:
+DimPlot(S24D_1,cols=cols.orgi,label = TRUE,label.size=2)
+# LinkedDimPlot(maize_in,image="slice1.3")
+############
+maize_in@meta.data$newclusters <- as.character(maize_in@meta.data$newclusters) #否则ESR作为factor新元素加不进去
+################################## S12D_1 ##################################
+### 17区属于ESR
+#  LinkedDimPlot(maize_in,image="slice1")
+esr <- subset(S12D_1, UMAP_1 > 9 & UMAP_2 < -3,idents="17")
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(esr),]$newclusters <- "ESR" ###批量改多个点
+################# S12D_1 AL
+not_al <- subset(S12D_1, Zm00001d013907 < 5.5,idents="4")  #S12D_1 6区有20多个spots属于CZ;6区改成14区
+Idents(not_al)
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(not_al),]$newclusters <- "PE"
+al <- subset(S12D_1, UMAP_1 < 5 & UMAP_2 < 6,idents="4") 
+Idents(al)
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(al),]$newclusters <- "AL"
+################# S12D_1 6区属于CZ
+cz <- subset(S12D_1, UMAP_1 < -5 & UMAP_2 > 5,idents="6")  #S12D_1 6区有20多个spots属于CZ;6区改成14区
+# Idents(cz)
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(cz),]$newclusters <- "CZ"
+################# S12D_1 27区属于SE
+se <- subset(S12D_1, idents="27")  #S12D_1 ；27区改成0区，SE
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(se),]$newclusters <- "SE"
+################# S12D_1 部分13区eas区属于SE
+eas12D_1 <- subset(S12D_1, UMAP_1 < 10 & UMAP_2 > 5,idents="13")  #S12D_1:改成VE
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(eas12D_1),]$newclusters <- "VE"
+ve <- subset(S12D_1, UMAP_1 < 2.5 & UMAP_2 > -5.5,idents="13")  #S12D_1:改成VE
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(ve),]$newclusters <- "VE"
+pe1 <- subset(S12D_1, UMAP_1 < -2 & UMAP_2 > -5,idents="24")  #S12D_1:改成PE
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(pe1),]$newclusters <- "PE"
+pe2 <- subset(S12D_1, UMAP_1 > 5 & UMAP_2 < 5,idents="10")  #S12D_1:改成PE
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(pe2),]$newclusters <- "PE"
+# maize_in@meta.data[rownames(maize_in@meta.data)=="GCTAGAGTAGAGATGT-1_1",]$newclusters <- "bg"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGGCAGATGCGTAAAC-1_1",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTTGTTGCTGAGTCAA-1_1",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGATCCGGAATATACT-1_1",]$newclusters <- "EAS"
+############################ 局部点
+maize_in@meta.data[rownames(maize_in@meta.data)=="GCGCTGCTTTGCATTT-1_1",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATAGGCTAGCTTCGCA-1_1",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTACAGACCTAAATGA-1_1",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GATCCTAAATCGGGAC-1_1",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGCTCGCGTTGAGGTA-1_1",]$newclusters <- "RA"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TAGACGCCCGTACCGG-1_1",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATAACGCCGGAGGGTC-1_1",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTCTGCGGGTTAGCGG-1_1",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACTCTCTGACTTAGGT-1_1",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACAAGGGCAGGCTCTG-1_1",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTCTCGACTAAGTTTG-1_1",]$newclusters <- "ESR"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGATCCCAGCATTAGT-1_1",]$newclusters <- "RA"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TAGACGCCCGTACCGG-1_1",]$newclusters <- "RA"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTAACGAACAAGCAGT-1_1",]$newclusters <- "BETL"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGACTCAGGATGTTAT-1_1",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GATCTTTGCAGGGTAT-1_1",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCCCAGCTTTAGTCTG-1_1",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTGCTGATCATGTTCG-1_1",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGATACCTCGCGGACA-1_1",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AACGTACTGTGGGTAC-1_1",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTACGCACGGAGTACC-1_1",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTCGTGTCTGGTCATC-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTCATGGCTCACAATC-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TATGCTCCCTACTTAC-1_1",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CACCGGTAGAGACATT-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTAAGCCGACAACTTC-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTCAAGCCGAGCTGAG-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGTAATGTCTTGCCGC-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTGGATTGGGTACCAC-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTTCCAGTCTGACCAT-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TACTGAGGGAAGAAAG-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGGTTAACTTACATTT-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CATGCGTTAGACAGAA-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTATGTGGGTCTAGTT-1_1",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTCTTAGTGGCTCAGA-1_1",]$newclusters <- "AL"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GCGCTAATTGAATAGA-1_1",]$newclusters <- "VE"
+Idents(maize_in) <- maize_in@meta.data$newclusters ###更改区名，否则Ident里还有27区!!!
+SpatialDimPlot(maize_in, cols=cols,group.by="newclusters",images="slice1")
+################################## S18D_1 27区属于VE ##################################
+ve <- subset(S18D_1, idents="27")  #S18D_1 ；27区改成11区，VE
+# Idents(ve)
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(ve),]$newclusters <- "VE" 
+################# S18D_1 部分13区eas区属于SE,SCU
+eas18D_1a <- subset(S18D_1, UMAP_1 < 1,idents="13")
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(eas18D_1a),]$newclusters <- "VE"
+eas18D_1b <- subset(S18D_1, UMAP_1 > 3 & UMAP_2 > -4,idents="13")
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(eas18D_1b),]$newclusters <- "SCU"
+eas18D_1c <- subset(S18D_1, UMAP_1 < 3 & UMAP_2 < -5,idents="13") ###7个点属于CZ
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(eas18D_1c),]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AAGAGATGAATCGGTA-1_2",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTGATCTAACTTTGTC-1_2",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTGGAAATGGATGCTT-1_2",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCCGGCCTAGCGTACA-1_2",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATAAGTAGGATTCAGA-1_2",]$newclusters <- "EAS"
+### Zm00001d013907 用marker基因定位AL，将不是的改成PE and VE
+maize_in@meta.data[rownames(maize_in@meta.data)=="CATGGCAGGAAGATCG-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTGCCTCAGTGTACGG-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACTTACCGGGCGCGCA-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTAGACTGCATTTCGT-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTGCTTACATCAGCGC-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GAATAGCATTTAGGGT-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CACACAGCTTGCGCTC-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GAACGCGGGTCACACG-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATCTCGTGAGCGAAAC-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AACAGGTAGTATGGAT-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GACCGCGTCTGACGTG-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGACCGCTCCGCGGTT-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TACCTCCACACCAATG-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGGTTGAGTATCCTTC-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CATTATCCCATTAACG-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCTCGACGTATCGCCG-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTGCCAAGCAGAACCC-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGGTTACACCATGCCG-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGAGATTTCGCTCGGG-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTCGCTAGGAAGTTGT-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TAAAGACAACCCTTTA-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTGAGTCCCGCTGCTG-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GAGCGCAAATACTCCG-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCCGTTTCGCAGATGT-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCATATGGAAACTATA-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATTGGATTACAGCGTA-1_2",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GACGAGGCTAATAAAC-1_2",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTTTGCATCGCTCTTG-1_2",]$newclusters <- "PE"
+# LinkedDimPlot(maize_in,image="slice1.1")
+Idents(maize_in) <- maize_in@meta.data$newclusters ###更改区名，否则Ident里还有27区!!!
+SpatialDimPlot(maize_in, cols=cols,group.by="newclusters",images="slice1.1")
+################################## S18D_2 27区属于SCU ##################################
+scu <- subset(S18D_2, idents="27")  #S12D_1 ；27区改成5区，scu
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(scu),]$newclusters <- "SCU" 
+eas18D_2a <- subset(S18D_2, UMAP_1 < 2.5 & UMAP_2 > -5,idents="13")
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(eas18D_2a),]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTACGTCACGTATTAA-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CACGGCGCGCCAAAGG-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGACACTTCTCTTTGC-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CATCTATCCCGTGTCT-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTGAAAGGTGTAAAGG-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGATCTACGCTGATCT-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GATATGCGGTAGCCAA-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATGCATGATCCAGGAT-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACGATCATACATAGAG-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTCATGGACATGACTA-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGGAAAGAATCAAACG-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCGGAGTACATGAGTA-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TAGAAAGGTGGCGCTA-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACTGTACGATACACAT-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACGCTAGTGATACACT-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCTCACCTGAGGGAGC-1_3",]$newclusters <- "SE"
+### 杂点
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGCCACTCCCGTGCTT-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTGTCAAATGGCTCGG-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCTCTAATCTGCCAAG-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCTGAATATTTACATA-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AATGCAACCGGGTACC-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGATTCGTCTATCACT-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTCGGATATCTCAGAC-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACTTGGGACCCGGTGG-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CAGTTCAAATTGACAC-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCCCAGGCTTAGCTAA-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGTTCCTACAGAATTA-1_3",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CACGACGTAATAGTAA-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGTGGACCACGTGTTA-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGGGTTCGGCACGTAT-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GCCTGCTACACTGAGA-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GACTCGGTCGGCGGAT-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GCAAGATGTGTTCGCG-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGTGCAGAGCCTATCG-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TAAAGCTGCAATAGGG-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TATCACTTCGAGTAAC-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GCAGGTAGAGTATGGT-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CACCCACGAGGCAATT-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCGTTACGTTAGAACA-1_3",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGAATTACATGGTGTT-1_3",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGCAGCGGTAATCCTA-1_3",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATCGTTCACTTTCGCC-1_3",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATTCTGAGTATGAACT-1_3",]$newclusters <- "RA"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGTTTACAAGGCAGCT-1_3",]$newclusters <- "PC"
+#### Zm00001d013907 用marker基因定位AL，将不是的改成PE and VE
+pe18D_2 <- subset(S18D_2, UMAP_1 > 2 & UMAP_2 > 6.5,idents="4")
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(pe18D_2),]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGAGGATCGGGAACGA-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTGCACCTAGTCCACA-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCACTATCCGGGTCAC-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AAATAAGGTAGTGCCC-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AAGTTTATGGGCCCAA-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCCTTGTCCTTTAATT-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTGCAAGAAGACTCCT-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TAGAGGGAGTTTATCT-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AACCCGCTGTATTCCA-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACTTGTTACCGGATCA-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGTAAATAACAAAGGG-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACCTCCGTTATTCACC-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCGGCACGACCGTTTC-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGGGACCGGCTGCGTT-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GCGAGCGCATGCTCCC-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GAAGGCTACCATTGTT-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATCTTTCGTATAACCA-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTCTATACACGCATGG-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGGTGCCCTGCCTTAC-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGTAGGCCAATATCAC-1_3",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TAGTCGATCACGGGTT-1_3",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCCTTACGACGGTCCG-1_3",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GACTCACCCACGTGAG-1_3",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGTTTAATTGAGCAGG-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATCGCTGCGTGCAGCA-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTCTAATGCATTGATC-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTCGTTCAACGAAGTT-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGGAATATCCTTGACC-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTCTTTGGTCGCGACG-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCGTGGAACGATCCAA-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGGTCGTGGCAAGTGT-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGTTGTAAGATTGATT-1_3",]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGATCCCAGCATTAGT-1_3",]$newclusters <- "VE"
+# LinkedDimPlot(maize_in,image="slice1.2")
+Idents(maize_in) <- maize_in@meta.data$newclusters ###更改区名，否则Ident里还有27区!!!
+SpatialDimPlot(maize_in, cols=cols,group.by="newclusters",images="slice1.2")
+################################## S24D_1 27区属于SCU ##################################
+# LinkedDimPlot(maize_in,image="slice1.3")
+# d <- subset(S24D_1, idents="27")  #S12D_1 ；27区改成5区，scu
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(scu),]$newclusters <- "SCU" 
+eas24D_1a <- subset(S24D_1, UMAP_1 < 3 & UMAP_2 > -4,idents="13")
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(eas24D_1a),]$newclusters <- "VE"
+eas24D_1b <- subset(S24D_1, UMAP_1 < 3 & UMAP_2  < -4,idents="13")
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(eas24D_1b),]$newclusters <- "CZ"
+cz <- subset(S24D_1, UMAP_1 < 3 & UMAP_2  < -4,idents="23") ###betl属于cz
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(cz),]$newclusters <- "CZ"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGTCGGATAAACGGCG-1_4",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTCGTTTCTAATGTTT-1_4",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACAGTATACCGTGGGA-1_4",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGACGGGCCGATTTAA-1_4",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACAAGGCCTACCAGCC-1_4",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CAGGTTTAGTACTACA-1_4",]$newclusters <- "SCU"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGGTTCAAGTAGGTGT-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TATCACCCAACCGACC-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGGAATATCCTTGACC-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CATTTAGCGGACCATG-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCGCTTTAAACGTTTG-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTGTACCTTGGCTACG-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATCTGGTTAAGACTGT-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACCGACTGAGTCCCAC-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTCATGCACCTCCGTT-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTTACACGGTATTCCA-1_4",]$newclusters <- "EAS"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GATCATTCCAAACATT-1_4",]$newclusters <- "SE"
+#### Zm00001d013907 用marker基因定位AL，将不是的改成PE and VE
+pe24D_1 <- subset(S24D_1, UMAP_1 > 2 & UMAP_2 > 6,idents="4")
+maize_in@meta.data[rownames(maize_in@meta.data) %in% Cells(pe24D_1),]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GGTCAAGACTACTTCG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTATGGGAAGCGGAAT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CATGGATTGTCTTCCG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACCTCCGCCCTCGCTG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCGCGTAGCAGTGTCC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AAGCGCAGGGCTTTGA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTTAGCCCATGACATC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AGTCTTTAAAGTGTCC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ATGTAGCGCGCGTAGG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GCCCTGAGGATGGGCT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TACGGAAGCCAAACCA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AATTCGATTCGAGGAT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GACTAGGCCGTTAGGT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GATTGGGAAAGGTTGT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GATTTGCGCTAACACC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCGAATCGCAGGGTAG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGTAAATAACAAAGGG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACTTGTTACCGGATCA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AACCCGCTGTATTCCA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGCAAACACGAGTTAC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTAATTCGCACGCGCT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AACAGGATGGGCCGCG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCGGAATGCGCTCTGA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TATGGCCCGGCCTCGC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTACTCTAGGCCCGGC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCGCGGGTACGAAGAA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACGAAATGGGCGGCAC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCGCGGGTACGAAGAA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTCTGCGAGCGCCCTT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="AAGTCTTCTGTGGCCT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGAACTGCTATGACTT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TAATTTCCGTCCAGTA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TACCTATCCCTAGAGG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACCAGACCATAACAAC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCCTTCAATCCCTACG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGTGTCGAAGTCGAGG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTGCTGCAGATAAGGA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GTCGTACCTACGATTG-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CACTCGGTTAGGAGGA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TTACTATCGGCTTCTC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCCGAACTTGGCTTAC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTACTCTAGGCCCGGC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCGGAATGCGCTCTGA-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTACTCTAGGCCCGGC-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TACAAGTCTCGTGCAT-1_4",]$newclusters <- "PE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TCGGAATGCGCTCTGA-1_4",]$newclusters <- "AL"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTACTCTAGGCCCGGC-1_4",]$newclusters <- "AL"
+maize_in@meta.data[rownames(maize_in@meta.data)=="ACGAAATGGGCGGCAC-1_4",]$newclusters <- "AL"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCGCGGGTACGAAGAA-1_4",]$newclusters <- "AL"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGTAATGACCACAATA-1_4",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTGCGATTTCGAGATT-1_4",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTCAGAGCTAATGTCG-1_4",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGCTCGGTGGGTCACC-1_4",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CCGCGGGTACGAAGAA-1_4",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="GATCATTCCAAACATT-1_4",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CGGTCAAGTGGGAACC-1_4",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="CTAAATCCTATTCCGG-1_4",]$newclusters <- "VE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TGAGTGGTCCGTGACG-1_4",]$newclusters <- "SE"
+maize_in@meta.data[rownames(maize_in@meta.data)=="TACGCTATAGAAACCT-1_4",]$newclusters <- "SE"
+Idents(maize_in) <- maize_in@meta.data$newclusters ###更改区名，否则Ident里还有27区!!!
+# LinkedDimPlot(maize_in,image="slice1.3")
+SpatialDimPlot(maize_in, cols=cols,group.by="newclusters",images="slice1.3")
+
+maize_in@meta.data$newclusters <- as.factor(maize_in@meta.data$newclusters) #恢复newclusters factor的属性
+
+############################ 画出最终的分区图
+SpatialDimPlot(maize_in, cols=cols,group.by="newclusters",images="slice1")
+SpatialDimPlot(maize_in, cols=cols,group.by="newclusters", images="slice1.1")
+SpatialDimPlot(maize_in, cols=cols,group.by="newclusters",images="slice1.2")
+SpatialDimPlot(maize_in, cols=cols,group.by="newclusters",images="slice1.3")
+DimPlot(maize_in, cols=cols,group.by="newclusters",label = T, label.size = 2,split.by = "orig.ident") #查看分好区后的UMAP点图
+maize_in <- RunTSNE(maize_in, dims = 1:30, verbose = FALSE)
+DimPlot(maize_in, reduction = "tsne",cols=cols,group.by="newclusters",label = T, label.size = 2,split.by = "orig.ident") #查看分好区后的UMAP点图
+DimPlot(maize_in, reduction = "pca",cols=cols,group.by="newclusters",label = T, label.size = 2,split.by = "orig.ident") #查看分好区后的UMAP点图
+############################
+table(Idents(maize_in)) #有27区
+Idents(maize_in) <- maize_in@meta.data$newclusters ###更改区名，否则Ident里还有27区!!!
+head(maize_in@meta.data)
+table(Idents(maize_in)) #无27区
+SpatialDimPlot(maize_in, cols=cols,images="slice1")
+saveRDS(maize_in,file="2maize_in已分区.rds")
+
