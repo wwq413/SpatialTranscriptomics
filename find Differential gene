@@ -1,0 +1,64 @@
+rm(list=ls())
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(clustree)
+library(limma)
+setwd("/2020simpleDuckweeds/spatial/maizev8")
+setwd("/Volumes/xwx/ST/")
+options(digits=2)
+BiocManager::install("limma")
+############################### 1. Read data ##################################
+maize_in <- readRDS("/2020simpleDuckweeds/spatial/maizev7/2maize_in.rds")
+#################################### 2. Repeat the cluster of divided grains ###################################################
+cols <- c("#97C9DC","#EF0002","#FACD5C","#FEEC70","#F8A33F","#B9D5AD","#BBD864","#FF52E5","#55ACD9","#FAECA9","#FFB6DE")
+names(cols) <- c("PE","ESR","VE","SE","AL","SCU","RA","EAS","PC","CZ","BETL");cols
+SpatialDimPlot(maize_in, cols=cols,label = T, label.size = 2,images="slice1")
+table(Idents(maize_in))### table() See how many cells are in each type
+############ Get the Entrez ID
+EntrezID <- read.csv(file = "27176EntrezID.csv",header=0- T,sep = "\t")
+head(EntrezID);dim(EntrezID);
+colnames(EntrezID) <- c("GeneID","EntrezID")
+############ Generate the gene annotation table with entrezID aveExpAnnotationEntrez.csv
+aveExpAnnotation <- read.csv(file = "27176aveExpAnnotation2.csv",header=T,sep = ",")
+head(aveExpAnnotation)
+aveExpAnnotationEntrez <- merge(x=aveExpAnnotation,y=EntrezID,by="GeneID",all.x = TRUE)
+head(aveExpAnnotationEntrez);dim(aveExpAnnotationEntrez)
+write.table (aveExpAnnotationEntrez, file ="aveExpAnnotationEntrez.csv", sep =",", row.names =T, col.names =TRUE, quote =TRUE)
+################################ 3.Differential gene#################################
+markersVE <- FindMarkers(maize_in, ident.1 = "VE", ident.2 = "SE") 
+head(markersVE,20);dim(markersVE)
+VEgene <- markersVE[markersVE$avg_log2FC > 0.58 & markersVE$p_val_adj < 0.001,]
+VEgene <- data.frame(GeneID=rownames(VEgene),VEgene)
+rownames(VEgene);dim(VEgene);tail(VEgene)
+VEEntrez <- EntrezID[EntrezID$GeneID %in% rownames(VEgene),]
+dim(VEEntrez);head(VEEntrez)
+VE_DGE <- merge(x=VEgene,y=aveExpAnnotation,by="GeneID",all.x = TRUE)
+head(VE_DGE);dim(VE_DGE)
+write.table (VE_DGE, file ="VE_DGE2.csv", sep =",", row.names =T, col.names =TRUE, quote =TRUE)
+
+################################### 4.find all markers################################
+allmarkers <- FindAllMarkers(maize_in,only.pos = TRUE)
+head(allmarkers)
+dim(allmarkers);length(unique(allmarkers$gene)) 
+maize_in@meta.data[1:5,1:10]
+saveRDS(maize_in,file="3maize_in差异表达.rds")
+colnames(allmarkers) <- c("p_val","avg_log2FC","pct.1","pct.2","p_val_adj","cluster","GeneID")
+head(allmarkers);dim(allmarkers)
+aveExp <- read.csv(file = "27176aveExp.csv",header=T,sep = ",")
+Population <- apply(aveExp[,1:11], 1, function(t) colnames(aveExp[,1:11])[which.max(t)]) 
+aveExp <- data.frame(aveExp,Population=Population); head(aveExp)
+aveExp <- data.frame(aveExp,max=apply(aveExp[,1:11],1,max),sum=apply(aveExp[,1:11],1,sum))
+head(aveExp)
+aveExp <- data.frame(aveExp,ratio=aveExp[,13]/aveExp[,14]);head(aveExp)
+aveExp$GeneID <- rownames(aveExp) 
+colnames(aveExp);head(aveExp)
+allmarkersExpression <- merge(allmarkers,aveExp,by="GeneID") 
+head(allmarkersExpression);dim(allmarkersExpression)
+write.table (allmarkersExpression, file ="5891allmarkersExpression.csv", sep =",", row.names =F, col.names =TRUE, quote =TRUE)
+marker5891 <- read.csv(file = "5891allmarkersExpression.csv",header=T,sep = ",")
+dim(marker5891)
+marker2992 <- marker5891 [!duplicated(marker5891[,1]),]
+dim(marker2992);head(marker2992)
+write.table (marker2992, file ="2992markersExpression.csv", sep =",", row.names =F, col.names =TRUE, quote =TRUE)
